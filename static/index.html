@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emotion Detection</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #16181d; --muted: #6b7280;
+    --line: #e3e6ea; --accent: #4f46e5; --bar: #e9eaee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161a; --card: #1c1f25; --text: #e9eaee; --muted: #9ba1ac;
+            --line: #2b2f37; --accent: #8b85ff; --bar: #2b2f37; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1rem; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  .sub { color: var(--muted); font-size: .875rem; margin: 0 0 1.5rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem; }
+  label { display: block; font-weight: 600; font-size: .875rem; margin-bottom: .5rem; }
+  textarea {
+    width: 100%; min-height: 110px; padding: .75rem; resize: vertical;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--text); font: inherit;
+  }
+  textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .row { display: flex; align-items: center; gap: .75rem; margin-top: .75rem; flex-wrap: wrap; }
+  button {
+    background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+    padding: .6rem 1.1rem; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { opacity: .55; cursor: default; }
+  .hint { color: var(--muted); font-size: .8125rem; }
+  .chips { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
+  .chip {
+    background: none; color: var(--muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: .3rem .7rem; font-size: .8125rem; font-weight: 400;
+  }
+  #result { margin-top: 1.25rem; }
+  #result[hidden] { display: none; }
+  .top { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+  .emoji { font-size: 2.5rem; line-height: 1; }
+  .name { font-size: 1.375rem; font-weight: 700; text-transform: capitalize; }
+  .conf { color: var(--muted); font-size: .875rem; }
+  .bar-row { display: grid; grid-template-columns: 5.5rem 1fr 3.25rem; align-items: center; gap: .6rem; margin-bottom: .45rem; font-size: .875rem; }
+  .bar-row span:first-child { text-transform: capitalize; }
+  .track { background: var(--bar); border-radius: 999px; height: 8px; overflow: hidden; }
+  .fill { display: block; background: var(--accent); height: 100%; border-radius: 999px; transition: width .3s ease; }
+  .pct { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .error { color: #d4183d; font-size: .875rem; margin-top: 1rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Emotion Detection</h1>
+  <p class="sub">BiLSTM classifier &middot; 6 emotions &middot; 92.5% test accuracy</p>
+
+  <div class="card">
+    <label for="text">Your text</label>
+    <textarea id="text" placeholder="i feel so grateful that things finally worked out"></textarea>
+    <div class="row">
+      <button id="go">Analyze</button>
+      <span class="hint">or press Ctrl/&#8984; + Enter</span>
+    </div>
+    <div class="chips">
+      <button class="chip">i feel completely drained and alone tonight</button>
+      <button class="chip">i feel furious that they lied to me again</button>
+      <button class="chip">i feel so loved and supported by my friends</button>
+    </div>
+    <p class="hint" style="margin:.9rem 0 0">Trained on first-person diary text &mdash; phrasing like
+      &ldquo;i feel &hellip;&rdquo; is what it handles best.</p>
+  </div>
+
+  <div id="result" class="card" hidden aria-live="polite">
+    <div class="top">
+      <span class="emoji" id="emoji"></span>
+      <div>
+        <div class="name" id="name"></div>
+        <div class="conf" id="conf"></div>
+      </div>
+    </div>
+    <div id="bars"></div>
+  </div>
+  <p class="error" id="error" hidden></p>
+</main>
+
+<script>
+const EMOJI = { sadness: "\u{1F622}", joy: "\u{1F604}", love: "\u2764\uFE0F",
+                anger: "\u{1F620}", fear: "\u{1F628}", surprise: "\u{1F632}" };
+const $ = id => document.getElementById(id);
+const pct = n => (n * 100).toFixed(1) + "%";
+
+async function analyze() {
+  const text = $("text").value.trim();
+  $("error").hidden = true;
+  if (!text) { $("text").focus(); return; }
+
+  $("go").disabled = true;
+  $("go").textContent = "Analyzing\u2026";
+  try {
+    const res = await fetch("/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    if (!res.ok) throw new Error("Request failed (" + res.status + ")");
+    const data = await res.json();
+
+    $("emoji").textContent = EMOJI[data.emotion] || "";
+    $("name").textContent = data.emotion;
+    $("conf").textContent = pct(data.confidence) + " confidence";
+    $("bars").innerHTML = Object.entries(data.probabilities)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, p]) =>
+        `<div class="bar-row"><span>${label}</span>` +
+        `<span class="track"><span class="fill" style="width:${p * 100}%"></span></span>` +
+        `<span class="pct">${pct(p)}</span></div>`)
+      .join("");
+    $("result").hidden = false;
+  } catch (err) {
+    $("error").textContent = err.message + ". Is the server running?";
+    $("error").hidden = false;
+  } finally {
+    $("go").disabled = false;
+    $("go").textContent = "Analyze";
+  }
+}
+
+$("go").addEventListener("click", analyze);
+$("text").addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) analyze();
+});
+document.querySelectorAll(".chip").forEach(c =>
+  c.addEventListener("click", () => { $("text").value = c.textContent; analyze(); }));
+</script>
+</body>
+</html>
