@@ -12,8 +12,9 @@ An Emotion Detection project using Python, Hugging Face `datasets`, and Machine 
 
 2. **Install dependencies:**
    ```bash
-   pip install datasets pandas numpy seaborn scikit-learn transformers torch
+   pip install -r requirements.txt
    ```
+
 
 3. **Run the Notebook:**
    Open `Emotion.ipynb` in VS Code, JupyterLab, or your preferred notebook runner.
