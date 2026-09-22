@@ -1,0 +1,18 @@
+{
+  "classes": [
+    "sadness",
+    "joy",
+    "love",
+    "anger",
+    "fear",
+    "surprise"
+  ],
+  "max_words": 10000,
+  "maxlen": 50,
+  "padding": "post",
+  "truncating": "post",
+  "test_accuracy": 0.9254999756813049,
+  "test_loss": 0.17459292709827423,
+  "epochs_trained": 5,
+  "exported_at": "2026-09-22T13:38:32.710858"
+}
