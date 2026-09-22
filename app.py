@@ -2,6 +2,7 @@
 
 import json
 import threading
+import unicodedata
 from pathlib import Path
 from typing import Annotated
 
@@ -34,6 +35,32 @@ class TextIn(BaseModel):
     text: Text
 
 
+# Apostrophe forms: straight, right/left single quote (phone keyboards produce
+# these), modifier letter apostrophe, spacing acute.
+_APOSTROPHES = dict.fromkeys(map(ord, "'’‘ʼ´"), None)
+
+
+def clean(text: str) -> str:
+    """Nudge user input toward the conventions of the training corpus.
+
+    The tokenizer's own filters already lowercase and strip punctuation, exactly
+    as they did at training time, so this deliberately does not repeat that work.
+    It closes the two gaps those filters leave:
+
+    * the apostrophe is the one punctuation mark absent from `filters`, and the
+      corpus writes contractions bare ("im" is its 17th most common word), so
+      "I'm" would otherwise tokenize to <unk> instead of "im";
+    * accented characters were never seen in training, so "elated" survives
+      while "elated" with an acute accent would become <unk>.
+
+    Both only move input closer to the training distribution; on corpus text the
+    function is a no-op (asserted in test_app.py).
+    """
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return text.translate(_APOSTROPHES)
+
+
 def predict(text: str) -> dict:
     """Preprocess exactly as training did: metadata's post/post padding.
 
@@ -41,7 +68,7 @@ def predict(text: str) -> dict:
     how the model was trained (cells 24-25) - metadata.json is the source of truth.
     """
     padded = pad_sequences(
-        tokenizer.texts_to_sequences([text]),
+        tokenizer.texts_to_sequences([clean(text)]),
         maxlen=META["maxlen"],
         padding=META["padding"],
         truncating=META["truncating"],

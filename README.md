@@ -59,3 +59,25 @@ on "i feel …" phrasing. In-distribution input is accurate (`i feel furious tha
 to me again` → anger 99%), but paraphrases drift (`everything feels heavy and pointless
 lately` → joy 86%). Retraining or fine-tuning a transformer is the fix, not a change to
 this API.
+
+### Input preprocessing
+
+`clean()` in `app.py` runs before tokenizing. It deliberately does **not** re-implement
+what the saved tokenizer already does — its `filters` config strips punctuation and
+lowercases, exactly as at training time, so `@#$%^&* i feel so loved <<>>` already works.
+It closes only the two gaps those filters leave:
+
+| input | without `clean()` | with `clean()` |
+|---|---|---|
+| `I'm furious...` | `im` → `<unk>` | `im` → token 17 |
+| `I’m furious...` (phone keyboard) | `im` → `<unk>` | `im` → token 17 |
+| `i feel élated` | `élated` → `<unk>` | `elated` folded to ASCII |
+
+The apostrophe is the one punctuation mark missing from `filters`, and the corpus writes
+contractions bare (`im` is its 17th most common word). Rewriting the test set the way a
+person actually types — real apostrophes, capitals, trailing `!` — costs 0.20pp
+(92.55% → 92.35%); `clean()` restores the full 92.55%.
+
+Both transforms only move input toward the training distribution, never away:
+`test_clean_is_noop_on_training_corpus` asserts `clean()` leaves all 2000 corpus rows
+byte-identical, so it cannot silently cause the drift it exists to prevent.
